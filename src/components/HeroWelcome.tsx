@@ -57,11 +57,15 @@ export const HeroWelcome: React.FC = () => {
             {/* Centerpiece: Emma & Bunso Frame (clean, no floating text) */}
             <div className="relative select-none">
               <div className="relative w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 rounded-full p-2 bg-stone-100 border border-stone-200 shadow-sm flex items-center justify-center overflow-hidden">
-                <img
-                  src="/public/assets/aistudio/emma_and_cat_570f15bb.jpg"
-                  alt="Emma and Bunso"
-                  className="w-full h-full object-cover object-[50%_35%] rounded-full"
-                />
+                <picture className="w-full h-full block">
+                  <source srcSet="/assets/aistudio/emma_and_cat_570f15bb.webp" type="image/webp" />
+                  <img
+                    src="/assets/aistudio/emma_and_cat_570f15bb.jpg"
+                    alt="Emma and Bunso"
+                    className="w-full h-full object-cover object-[50%_35%] rounded-full"
+                    loading="eager"
+                  />
+                </picture>
               </div>
             </div>
 
@@ -161,11 +165,15 @@ export const HeroWelcome: React.FC = () => {
               <div className="relative bg-[#FAF9F5] p-2.5 pb-4 rounded-sm shadow-[2px_3px_6px_rgba(0,0,0,0.1)] border border-stone-200 rotate-2 max-w-[190px] select-none">
                 <TapeStrip rotation="-rotate-6" className="absolute -top-2 left-6" />
                 <div className="aspect-[3/4] w-36 sm:w-40 overflow-hidden rounded-2xs bg-stone-100 border border-stone-200">
-                  <img
-                    src="/public/assets/aistudio/emma_in_temple_bcf2ee0e.jpg"
-                    alt="Emma"
-                    className="w-full h-full object-cover object-top"
-                  />
+                  <picture className="w-full h-full block">
+                    <source srcSet="/assets/aistudio/emma_in_temple_bcf2ee0e.webp" type="image/webp" />
+                    <img
+                      src="/assets/aistudio/emma_in_temple_bcf2ee0e.jpg"
+                      alt="Emma"
+                      className="w-full h-full object-cover object-top"
+                      loading="lazy"
+                    />
+                  </picture>
                 </div>
                 <div className="text-center mt-2 text-xs text-slate-600 font-medium">
                   The Birthday Girl ✨

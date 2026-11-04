@@ -92,11 +92,15 @@ export const StealthMissionGuide: React.FC = () => {
           {/* Visual Route Map: Palosapis Park to Peckson House */}
           <div className="relative rounded-2xl overflow-hidden border border-stone-200 bg-[#FAF9F5] shadow-xs">
             <div className="relative overflow-hidden">
-              <img
-                src="/public/assets/aistudio/Peckson_House_directions_d439c836.png"
-                alt="Directions from Palosapis Park to Peckson House"
-                className="w-full h-auto max-h-[520px] object-contain mx-auto block"
-              />
+              <picture className="w-full block">
+                <source srcSet="/assets/aistudio/Peckson_House_directions_d439c836.webp" type="image/webp" />
+                <img
+                  src="/assets/aistudio/Peckson_House_directions_d439c836.png"
+                  alt="Directions from Palosapis Park to Peckson House"
+                  className="w-full h-auto max-h-[520px] object-contain mx-auto block"
+                  loading="lazy"
+                />
+              </picture>
             </div>
             <div className="px-4 py-2 bg-stone-100/90 border-t border-stone-200 flex flex-wrap items-center justify-between gap-2 text-xs">
               <span className="text-slate-700 font-bold text-xs sm:text-sm flex items-center gap-1.5">
@@ -104,7 +108,7 @@ export const StealthMissionGuide: React.FC = () => {
                 <span>Follow the pink paw prints from Palosapis Park to the entrance</span>
               </span>
               <a
-                href="/public/assets/aistudio/Peckson_House_directions_d439c836.png"
+                href="/assets/aistudio/Peckson_House_directions_d439c836.webp"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-slate-600 hover:text-slate-900 underline flex items-center gap-1 font-semibold"
