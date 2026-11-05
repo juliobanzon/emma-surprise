@@ -35,6 +35,7 @@ import {
   GOOGLE_APPS_SCRIPT_TEMPLATE,
 } from '../lib/googleWorkspace';
 import { soundEffects } from '../lib/audioEffects';
+import { EVENT_DETAILS } from '../data/partyDetails';
 
 interface OrganizerModalProps {
   isOpen: boolean;
@@ -343,6 +344,27 @@ export const OrganizerModal: React.FC<OrganizerModalProps> = ({
               <div className="text-2xl font-black text-slate-900">{submissions.length}</div>
               <div className="text-[11px] text-slate-500 font-medium">In local database</div>
             </div>
+          </div>
+
+          {/* Official Google Form Direct Access */}
+          <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+            <div>
+              <div className="text-xs font-extrabold text-indigo-950 flex items-center gap-1.5">
+                <span>📝 Official Google Form (Embedded on Website)</span>
+              </div>
+              <div className="text-[11px] text-indigo-800">
+                Guests fill this out directly on the website, saving all responses into your Google Sheet automatically.
+              </div>
+            </div>
+            <a
+              href={EVENT_DETAILS.googleFormUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold transition-colors shadow-2xs shrink-0 self-start sm:self-auto"
+            >
+              <span>Open Form in New Tab</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
           </div>
 
           {/* Google Sheets Live Sync (Cloudflare & Zero-Auth Guest Ready) */}

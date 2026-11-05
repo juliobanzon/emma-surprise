@@ -358,34 +358,36 @@ export async function sendRsvpToWebhook(webhookUrl: string, submission: RsvpSubm
     driveLinks: (submission.attachmentUrls || []).join('\n') || 'None',
   };
 
-  const endpointsToTry: string[] = [webhookUrl.trim()];
-  if (webhookUrl.includes('/dev')) {
-    endpointsToTry.push(webhookUrl.trim().replace(/\/dev(\?.*)?$/, '/exec$1'));
-  } else if (webhookUrl.includes('/exec')) {
-    endpointsToTry.push(webhookUrl.trim().replace(/\/exec(\?.*)?$/, '/dev$1'));
+  // Always target the public production endpoint
+  let targetUrl = webhookUrl.trim();
+  if (targetUrl.includes('/dev')) {
+    targetUrl = targetUrl.replace(/\/dev(\?.*)?$/, '/exec$1');
   }
 
-  let anySuccess = false;
-  for (const endpoint of endpointsToTry) {
-    try {
-      await fetch(endpoint, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
-        body: JSON.stringify(payload),
-      });
-      anySuccess = true;
-    } catch (err) {
-      console.warn('Webhook sync error for:', endpoint, err);
-    }
+  try {
+    await fetch(targetUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify(payload),
+    });
+    return true;
+  } catch (err) {
+    console.warn('Webhook sync error for:', targetUrl, err);
+    return false;
   }
-
-  return anySuccess;
 }
 
-export const GOOGLE_APPS_SCRIPT_TEMPLATE = `function doPost(e) {
+export const GOOGLE_APPS_SCRIPT_TEMPLATE = `function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "active",
+    message: "Emma's Surprise Party RSVP Webhook is ready and active!"
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
   try {
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     

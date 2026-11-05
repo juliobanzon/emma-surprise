@@ -34,6 +34,8 @@ Thanks and I look forward to hanging with you all!`,
   wazeSearchUrl: 'https://waze.com/ul/hwdw46qx6x',
   defaultTelegramUrl: 'https://t.me/+kX27iNvLJ0wyYWFl',
   defaultSheetWebhookUrl: 'https://script.google.com/macros/s/AKfycbzhmi_Ln2QWLq0qUneEvEE8dudJNN7mlcGDQEe3GAcMnXf1emm0FpbCUS5RjlYeUpWwOQ/exec',
+  googleFormUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSftmCh1ag-QbEYH9G0r9vJh8AcsFyk9uIiKsstB3QFZcge-yA/viewform',
+  googleFormEmbedUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSftmCh1ag-QbEYH9G0r9vJh8AcsFyk9uIiKsstB3QFZcge-yA/viewform?embedded=true',
 };
 
 
