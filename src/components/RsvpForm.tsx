@@ -27,6 +27,7 @@ import {
   getOrCreateSpreadsheet,
   uploadFileToDrive,
   appendRsvpToGoogleSheet,
+  sendRsvpToWebhook,
 } from '../lib/googleWorkspace';
 import { TapeStrip } from './CollageElements';
 
@@ -35,6 +36,8 @@ interface RsvpFormProps {
   onLogin: () => void;
   onSubmissionSuccess: (sub: RsvpSubmission) => void;
   telegramUrl?: string;
+  sheetWebhookUrl?: string;
+  onOpenOrganizer?: () => void;
 }
 
 export const RsvpForm: React.FC<RsvpFormProps> = ({
@@ -42,6 +45,8 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({
   onLogin,
   onSubmissionSuccess,
   telegramUrl,
+  sheetWebhookUrl,
+  onOpenOrganizer,
 }) => {
   // Form fields
   const [name, setName] = useState('');
@@ -146,8 +151,33 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({
     let syncedToGoogle = false;
 
     try {
+      // Step 1: If Google Sheet Webhook URL is configured (works on Cloudflare without user login)
+      if (sheetWebhookUrl) {
+        setUploadProgress('Sending RSVP to Emma\'s Google Sheet...');
+        const webhookPayload: RsvpSubmission = {
+          id: submissionId,
+          name: name.trim(),
+          email: email.trim(),
+          attendance,
+          plusOnes,
+          companionNames: companionNames.trim(),
+          dietaryRestrictions: dietaryRestrictions.trim(),
+          favoriteDrink: favoriteDrink.trim(),
+          message: message.trim(),
+          attachmentUrls: uploadedDriveUrls,
+          attachmentNames,
+          driveFileIds: uploadedDriveIds,
+          createdAt,
+          syncedToGoogle: true,
+        };
+        const ok = await sendRsvpToWebhook(sheetWebhookUrl, webhookPayload);
+        if (ok) {
+          syncedToGoogle = true;
+        }
+      }
+
       if (accessToken) {
-        // Step 1: Ensure Google Drive folder exists
+        // Step 2: Ensure Google Drive folder exists
         setUploadProgress('Connecting to Google Drive...');
         const syncConfig = getStoredSyncConfig();
 
@@ -324,18 +354,25 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({
             <TapeStrip rotation="rotate-6" className="absolute -top-2 right-10" />
 
             {/* Google Workspace status indicator */}
-            <div className="flex items-center justify-between text-xs pb-4 border-b border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs pb-4 border-b border-slate-100 gap-2">
               <div className="flex items-center gap-2 text-slate-600">
                 <Table className="w-3.5 h-3.5 text-slate-400" />
-                <span>Responses sync to Google Sheets &amp; Drive</span>
+                {sheetWebhookUrl || accessToken ? (
+                  <span className="text-emerald-700 font-semibold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Live Google Sheet sync active</span>
+                  </span>
+                ) : (
+                  <span>Responses sync to Emma&apos;s Sheet</span>
+                )}
               </div>
-              {!accessToken && (
+              {!sheetWebhookUrl && !accessToken && onOpenOrganizer && (
                 <button
                   type="button"
-                  onClick={onLogin}
-                  className="text-xs text-slate-600 hover:text-slate-900 font-medium underline"
+                  onClick={onOpenOrganizer}
+                  className="text-xs text-slate-600 hover:text-slate-900 font-medium underline text-left sm:text-right"
                 >
-                  Sign in with Google
+                  Connect Sheet (Organizer)
                 </button>
               )}
             </div>

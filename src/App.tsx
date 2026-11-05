@@ -69,6 +69,26 @@ export default function App() {
     }
   };
 
+  // Google Sheet Webhook URL state (for automatic Cloudflare sync)
+  const [sheetWebhookUrl, setSheetWebhookUrl] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem('emma_party_sheet_webhook_url_v1');
+      if (stored && stored.trim().includes('/exec')) return stored;
+    } catch {
+      // ignore
+    }
+    return EVENT_DETAILS.defaultSheetWebhookUrl || '';
+  });
+
+  const handleUpdateSheetWebhookUrl = (newUrl: string) => {
+    setSheetWebhookUrl(newUrl);
+    try {
+      localStorage.setItem('emma_party_sheet_webhook_url_v1', newUrl);
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     const unsubscribe = initAuth(
       (currentUser, token) => {
@@ -136,6 +156,8 @@ export default function App() {
           onLogin={handleLogin}
           onSubmissionSuccess={handleSubmissionSuccess}
           telegramUrl={telegramUrl}
+          sheetWebhookUrl={sheetWebhookUrl}
+          onOpenOrganizer={() => setIsOrganizerOpen(true)}
         />
       </main>
 
@@ -151,6 +173,8 @@ export default function App() {
         onLogin={handleLogin}
         telegramUrl={telegramUrl}
         onUpdateTelegramUrl={handleUpdateTelegramUrl}
+        sheetWebhookUrl={sheetWebhookUrl}
+        onUpdateSheetWebhookUrl={handleUpdateSheetWebhookUrl}
       />
     </div>
   );

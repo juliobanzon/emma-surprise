@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Table,
@@ -18,9 +18,22 @@ import {
   Sparkles,
   Link as LinkIcon,
   MessageSquare,
+  Copy,
+  Check,
+  Code,
+  Send,
+  HelpCircle,
 } from 'lucide-react';
 import { RsvpSubmission, GoogleSyncConfig } from '../types';
-import { getStoredSyncConfig, saveStoredSyncConfig, getOrCreateSpreadsheet, getOrCreateDriveFolder, appendRsvpToGoogleSheet } from '../lib/googleWorkspace';
+import {
+  getStoredSyncConfig,
+  saveStoredSyncConfig,
+  getOrCreateSpreadsheet,
+  getOrCreateDriveFolder,
+  appendRsvpToGoogleSheet,
+  sendRsvpToWebhook,
+  GOOGLE_APPS_SCRIPT_TEMPLATE,
+} from '../lib/googleWorkspace';
 import { soundEffects } from '../lib/audioEffects';
 
 interface OrganizerModalProps {
@@ -31,6 +44,8 @@ interface OrganizerModalProps {
   onLogin: () => void;
   telegramUrl: string;
   onUpdateTelegramUrl: (url: string) => void;
+  sheetWebhookUrl?: string;
+  onUpdateSheetWebhookUrl?: (url: string) => void;
 }
 
 export const OrganizerModal: React.FC<OrganizerModalProps> = ({
@@ -41,6 +56,8 @@ export const OrganizerModal: React.FC<OrganizerModalProps> = ({
   onLogin,
   telegramUrl,
   onUpdateTelegramUrl,
+  sheetWebhookUrl = '',
+  onUpdateSheetWebhookUrl,
 }) => {
   const [syncConfig, setSyncConfig] = useState<GoogleSyncConfig | null>(() => getStoredSyncConfig());
   const [isSyncing, setIsSyncing] = useState(false);
@@ -48,6 +65,77 @@ export const OrganizerModal: React.FC<OrganizerModalProps> = ({
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [editingTelegramUrl, setEditingTelegramUrl] = useState(telegramUrl);
   const [savedTelegramToast, setSavedTelegramToast] = useState(false);
+
+  // Webhook Sync states for Cloudflare
+  const [editingWebhookUrl, setEditingWebhookUrl] = useState(sheetWebhookUrl);
+
+  useEffect(() => {
+    if (sheetWebhookUrl) {
+      setEditingWebhookUrl(sheetWebhookUrl);
+    }
+  }, [sheetWebhookUrl]);
+  const [savedWebhookToast, setSavedWebhookToast] = useState(false);
+  const [isSendingTest, setIsSendingTest] = useState(false);
+  const [testFeedback, setTestFeedback] = useState<{ success: boolean; message: string } | null>(null);
+  const [copiedScriptToast, setCopiedScriptToast] = useState(false);
+  const [showScriptCode, setShowScriptCode] = useState(false);
+
+  const handleSaveWebhook = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (onUpdateSheetWebhookUrl) {
+      onUpdateSheetWebhookUrl(editingWebhookUrl.trim());
+    }
+    setSavedWebhookToast(true);
+    soundEffects.playCoin();
+    setTimeout(() => setSavedWebhookToast(false), 2500);
+  };
+
+  const handleCopyAppsScript = () => {
+    navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_TEMPLATE);
+    setCopiedScriptToast(true);
+    soundEffects.playCoin();
+    setTimeout(() => setCopiedScriptToast(false), 2500);
+  };
+
+  const handleSendTestRow = async () => {
+    if (!editingWebhookUrl.trim()) {
+      setTestFeedback({ success: false, message: 'Please enter a Webhook URL first.' });
+      return;
+    }
+    setIsSendingTest(true);
+    setTestFeedback(null);
+
+    const testSubmission: RsvpSubmission = {
+      id: 'test_' + Date.now(),
+      name: 'Test Guest (Julio verification)',
+      email: 'julio.test@example.com',
+      attendance: 'yes',
+      plusOnes: 1,
+      companionNames: 'Bunso the cat',
+      dietaryRestrictions: 'None (test)',
+      favoriteDrink: 'Sparkling Water',
+      message: 'Testing Google Sheet sync connection from Cloudflare!',
+      createdAt: new Date().toISOString(),
+      attachmentNames: ['test_verification.png'],
+      attachmentUrls: [],
+    };
+
+    const success = await sendRsvpToWebhook(editingWebhookUrl, testSubmission);
+    setIsSendingTest(false);
+
+    if (success) {
+      setTestFeedback({
+        success: true,
+        message: '✓ Test row successfully sent to your Google Sheet! Check your spreadsheet now.',
+      });
+      soundEffects.playFanfare();
+    } else {
+      setTestFeedback({
+        success: false,
+        message: 'Could not send test row. Please verify your Apps Script Web App URL and deployment access.',
+      });
+    }
+  };
 
   const handleSaveTelegram = (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,30 +229,28 @@ export const OrganizerModal: React.FC<OrganizerModalProps> = ({
 
   const handleDownloadCsv = () => {
     const headers = [
-      'Timestamp',
       'Name',
       'Email',
-      'Attending',
-      'PlusOnes',
+      'Attendance',
+      'Plus Ones',
       'Companions',
-      'Dietary',
-      'FavoriteDrink',
+      'Dietary Restrictions',
+      'Drink Choice',
       'Message',
-      'AttachmentCount',
-      'DriveLinks',
+      'Submission Date',
+      'Media Links',
     ];
 
     const rows = submissions.map((s) => [
-      `"${s.createdAt}"`,
       `"${s.name.replace(/"/g, '""')}"`,
       `"${(s.email || '').replace(/"/g, '""')}"`,
-      `"${s.attendance}"`,
+      `"${s.attendance === 'yes' ? 'Yes (5PM)' : s.attendance === 'no' ? 'No' : 'Maybe'}"`,
       s.plusOnes,
-      `"${(s.companionNames || '').replace(/"/g, '""')}"`,
-      `"${(s.dietaryRestrictions || '').replace(/"/g, '""')}"`,
-      `"${(s.favoriteDrink || '').replace(/"/g, '""')}"`,
+      `"${(s.companionNames || 'None').replace(/"/g, '""')}"`,
+      `"${(s.dietaryRestrictions || 'None').replace(/"/g, '""')}"`,
+      `"${(s.favoriteDrink || 'None').replace(/"/g, '""')}"`,
       `"${s.message.replace(/"/g, '""')}"`,
-      s.attachmentUrls?.length || 0,
+      `"${new Date(s.createdAt).toLocaleString('en-US', { timeZone: 'Asia/Manila' })}"`,
       `"${(s.attachmentUrls || []).join(' ; ')}"`,
     ]);
 
@@ -259,13 +345,157 @@ export const OrganizerModal: React.FC<OrganizerModalProps> = ({
             </div>
           </div>
 
-          {/* Google Sheets & Drive Hub */}
+          {/* Google Sheets Live Sync (Cloudflare & Zero-Auth Guest Ready) */}
+          <div className="p-5 rounded-3xl bg-linear-to-r from-emerald-50 via-teal-50 to-green-50 border-2 border-emerald-300 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <h4 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                    <Table className="w-4 h-4 text-emerald-700" />
+                    <span>Live Google Sheet Sync (Cloudflare Ready)</span>
+                  </h4>
+                </div>
+                <p className="text-xs text-slate-600 mt-1">
+                  Connect your Google Sheet so <strong>every guest RSVP automatically appends a new row</strong> directly into its designated column.
+                </p>
+                <div className="flex flex-wrap gap-1 mt-2.5">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider py-0.5 mr-1">Designated Columns:</span>
+                  {[
+                    'A: Name',
+                    'B: Email',
+                    'C: Attendance',
+                    'D: Plus Ones',
+                    'E: Companions',
+                    'F: Dietary Restrictions',
+                    'G: Drink Choice',
+                    'H: Message',
+                  ].map((col) => (
+                    <span
+                      key={col}
+                      className="px-2 py-0.5 rounded-md bg-white border border-emerald-300 text-emerald-900 text-[10px] font-semibold font-mono shadow-2xs"
+                    >
+                      {col}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {savedWebhookToast && (
+                <span className="text-xs font-bold text-emerald-800 bg-emerald-200 px-3 py-1 rounded-lg shrink-0">
+                  ✓ Saved!
+                </span>
+              )}
+            </div>
+
+            {/* Webhook Input Form */}
+            <form onSubmit={handleSaveWebhook} className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Google Apps Script Web App URL
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="url"
+                  placeholder="https://script.google.com/macros/s/.../exec"
+                  value={editingWebhookUrl}
+                  onChange={(e) => setEditingWebhookUrl(e.target.value)}
+                  className="flex-1 px-3.5 py-2.5 rounded-xl border border-emerald-300 bg-white text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-emerald-400"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow-xs transition-colors shrink-0 cursor-pointer"
+                >
+                  Save Sheet Webhook
+                </button>
+              </div>
+            </form>
+
+            {/* Action buttons: Test Connection & Copy Apps Script */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleSendTestRow}
+                disabled={isSendingTest}
+                className="px-3.5 py-2 rounded-xl bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>{isSendingTest ? 'Sending Test Row...' : 'Send Test Row to Sheet'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopyAppsScript}
+                className="px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+              >
+                {copiedScriptToast ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-700">Copied Apps Script!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Copy Apps Script Code</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowScriptCode(!showScriptCode)}
+                className="text-xs text-emerald-800 hover:underline font-semibold flex items-center gap-1 ml-auto"
+              >
+                <Code className="w-3.5 h-3.5" />
+                <span>{showScriptCode ? 'Hide Instructions' : 'How to set this up in 60s'}</span>
+              </button>
+            </div>
+
+            {/* Test Feedback Notice */}
+            {testFeedback && (
+              <div
+                className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                  testFeedback.success
+                    ? 'bg-emerald-100 border border-emerald-300 text-emerald-900'
+                    : 'bg-rose-50 border border-rose-200 text-rose-800'
+                }`}
+              >
+                {testFeedback.success ? (
+                  <CheckCircle className="w-4 h-4 text-emerald-700 shrink-0" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{testFeedback.message}</span>
+              </div>
+            )}
+
+            {/* Step-by-Step Instructions & Code Snippet */}
+            {showScriptCode && (
+              <div className="p-4 rounded-2xl bg-white border border-emerald-200 text-xs space-y-3">
+                <div className="font-bold text-slate-900">
+                  ⚡ 60-Second Google Sheet Setup (Works 100% on Cloudflare without guest logins):
+                </div>
+                <ol className="list-decimal list-inside space-y-1.5 text-slate-700 leading-relaxed">
+                  <li>Open your Google Sheet, then click <strong>Extensions → Apps Script</strong> in the top menu.</li>
+                  <li>Erase any template code in the editor, click <strong>&ldquo;Copy Apps Script Code&rdquo;</strong> above, and paste it.</li>
+                  <li>Click <strong>Deploy → New deployment</strong>.</li>
+                  <li>Select type: <strong>Web app</strong>. Set <em>Execute as: Me</em>, and <em>Who has access: Anyone</em>.</li>
+                  <li>Click <strong>Deploy</strong>, authorize if prompted, and copy the <strong>Web app URL</strong>.</li>
+                  <li>Paste the URL above and click <strong>Save Sheet Webhook</strong>!</li>
+                </ol>
+                <pre className="p-3 bg-slate-900 text-emerald-300 rounded-xl text-[11px] overflow-x-auto font-mono max-h-48">
+                  {GOOGLE_APPS_SCRIPT_TEMPLATE}
+                </pre>
+              </div>
+            )}
+          </div>
+
+          {/* Direct Google Workspace & Drive OAuth Hub */}
           <div className="p-5 rounded-3xl bg-slate-50 border-2 border-slate-200 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h4 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                  <Table className="w-4 h-4 text-emerald-600" />
-                  Google Workspace Direct Links
+                  <Table className="w-4 h-4 text-slate-700" />
+                  <span>Google Workspace Direct Links (Host OAuth)</span>
                 </h4>
                 <p className="text-xs text-slate-500">
                   Target spreadsheet and media drive folder for all guestbook entries.
@@ -287,10 +517,10 @@ export const OrganizerModal: React.FC<OrganizerModalProps> = ({
                   type="button"
                   onClick={handleSyncAllToGoogle}
                   disabled={isSyncing}
-                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-2xs transition-colors"
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-2xs transition-colors"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  Sync All Responses Now
+                  Sync Local Responses to Sheet
                 </button>
               </div>
             </div>

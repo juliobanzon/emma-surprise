@@ -224,17 +224,16 @@ export async function getOrCreateSpreadsheet(accessToken: string): Promise<{ id:
               rowData: [
                 {
                   values: [
-                    { userEnteredValue: { stringValue: 'Submission Date & Time' } },
-                    { userEnteredValue: { stringValue: 'Guest Name' } },
+                    { userEnteredValue: { stringValue: 'Name' } },
                     { userEnteredValue: { stringValue: 'Email' } },
-                    { userEnteredValue: { stringValue: 'Attending?' } },
+                    { userEnteredValue: { stringValue: 'Attendance' } },
                     { userEnteredValue: { stringValue: 'Plus Ones' } },
-                    { userEnteredValue: { stringValue: 'Companion Names' } },
+                    { userEnteredValue: { stringValue: 'Companions' } },
                     { userEnteredValue: { stringValue: 'Dietary Restrictions' } },
-                    { userEnteredValue: { stringValue: 'Favorite Party Drink' } },
-                    { userEnteredValue: { stringValue: 'Secret Message / Video Note for Emma' } },
-                    { userEnteredValue: { stringValue: 'Attachment Filenames' } },
-                    { userEnteredValue: { stringValue: 'Google Drive File Links' } },
+                    { userEnteredValue: { stringValue: 'Drink Choice' } },
+                    { userEnteredValue: { stringValue: 'Message' } },
+                    { userEnteredValue: { stringValue: 'Submission Date' } },
+                    { userEnteredValue: { stringValue: 'Media Links' } },
                   ],
                 },
               ],
@@ -276,28 +275,23 @@ export async function appendRsvpToGoogleSheet(
     ? submission.attachmentUrls.join('\n')
     : 'None';
 
-  const filenamesText = submission.attachmentNames && submission.attachmentNames.length > 0
-    ? submission.attachmentNames.join(', ')
-    : 'None';
-
   const values = [
     [
-      new Date(submission.createdAt).toLocaleString('en-US', { timeZone: 'Asia/Manila' }) + ' (PHT)',
       submission.name,
-      submission.email,
+      submission.email || '',
       attendingLabel,
       submission.plusOnes,
       submission.companionNames || 'None',
       submission.dietaryRestrictions || 'None',
       submission.favoriteDrink || 'None',
       submission.message,
-      filenamesText,
+      new Date(submission.createdAt).toLocaleString('en-US', { timeZone: 'Asia/Manila' }) + ' (PHT)',
       driveLinksText,
     ],
   ];
 
   const appendRes = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/RSVPs%20&%20Messages!A:K:append?valueInputOption=USER_ENTERED`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/RSVPs%20&%20Messages!A:J:append?valueInputOption=USER_ENTERED`,
     {
       method: 'POST',
       headers: {
@@ -308,10 +302,10 @@ export async function appendRsvpToGoogleSheet(
     }
   );
 
-  // If tab name failed, fallback to appending to first available range A:K
+  // If tab name failed, fallback to appending to first available range A:J
   if (!appendRes.ok) {
     const retryRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/A:K:append?valueInputOption=USER_ENTERED`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/A:J:append?valueInputOption=USER_ENTERED`,
       {
         method: 'POST',
         headers: {
@@ -331,3 +325,106 @@ export async function appendRsvpToGoogleSheet(
 
   return await appendRes.json();
 }
+
+/**
+ * Sends an RSVP submission directly to a Google Apps Script Webhook URL.
+ * Works seamlessly on Cloudflare Pages without requiring guests to sign in.
+ * Uses text/plain with mode: 'no-cors' so that Google's 302 redirect response
+ * does not trigger a CORS preflight rejection in modern browsers.
+ */
+export async function sendRsvpToWebhook(webhookUrl: string, submission: RsvpSubmission): Promise<boolean> {
+  if (!webhookUrl || !webhookUrl.trim()) return false;
+
+  const attendingLabel =
+    submission.attendance === 'yes'
+      ? 'YES (Arriving 5PM sharp!)'
+      : submission.attendance === 'no'
+      ? 'NO (Sending love from afar)'
+      : 'MAYBE';
+
+  const payload = {
+    name: submission.name,
+    email: submission.email || '',
+    attendance: attendingLabel,
+    plusOnes: submission.plusOnes,
+    companions: submission.companionNames || 'None',
+    companionNames: submission.companionNames || 'None',
+    dietaryRestrictions: submission.dietaryRestrictions || 'None',
+    drinkChoice: submission.favoriteDrink || 'None',
+    favoriteDrink: submission.favoriteDrink || 'None',
+    message: submission.message,
+    timestamp: new Date(submission.createdAt).toLocaleString('en-US', { timeZone: 'Asia/Manila' }) + ' (PHT)',
+    attachments: (submission.attachmentNames || []).join(', ') || 'None',
+    driveLinks: (submission.attachmentUrls || []).join('\n') || 'None',
+  };
+
+  const endpointsToTry: string[] = [webhookUrl.trim()];
+  if (webhookUrl.includes('/dev')) {
+    endpointsToTry.push(webhookUrl.trim().replace(/\/dev(\?.*)?$/, '/exec$1'));
+  } else if (webhookUrl.includes('/exec')) {
+    endpointsToTry.push(webhookUrl.trim().replace(/\/exec(\?.*)?$/, '/dev$1'));
+  }
+
+  let anySuccess = false;
+  for (const endpoint of endpointsToTry) {
+    try {
+      await fetch(endpoint, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify(payload),
+      });
+      anySuccess = true;
+    } catch (err) {
+      console.warn('Webhook sync error for:', endpoint, err);
+    }
+  }
+
+  return anySuccess;
+}
+
+export const GOOGLE_APPS_SCRIPT_TEMPLATE = `function doPost(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    
+    // Auto-create headers matching designated columns if sheet is empty
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow([
+        "Name",
+        "Email",
+        "Attendance",
+        "Plus Ones",
+        "Companions",
+        "Dietary Restrictions",
+        "Drink Choice",
+        "Message",
+        "Submission Date",
+        "Media Links"
+      ]);
+      sheet.getRange(1, 1, 1, 10).setFontWeight("bold");
+    }
+
+    var data = JSON.parse(e.postData.contents);
+    sheet.appendRow([
+      data.name || "",
+      data.email || "",
+      data.attendance || "",
+      data.plusOnes !== undefined ? data.plusOnes : 0,
+      data.companions || data.companionNames || "None",
+      data.dietaryRestrictions || "None",
+      data.drinkChoice || data.favoriteDrink || "None",
+      data.message || "",
+      data.timestamp || new Date().toLocaleString(),
+      data.driveLinks || data.attachments || "None"
+    ]);
+
+    return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+
